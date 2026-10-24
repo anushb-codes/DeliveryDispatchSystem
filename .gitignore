@@ -1,0 +1,19 @@
+# C++ Build Outputs & Executables
+*.exe
+*.o
+*.obj
+*.dll
+*.so
+backend.exe
+
+# Node / React / Vite Dependencies & Builds
+node_modules/
+dist/
+build/
+.env
+
+# Editor & OS Temp Files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

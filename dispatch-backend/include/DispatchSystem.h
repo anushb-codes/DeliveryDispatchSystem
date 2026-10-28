@@ -14,6 +14,7 @@ class Treap;
 class DispatchSystem {
 private:
     BinomialHeap* pendingOrdersQueue; 
+    BinomialHeap* stagingOrdersQueue; // NEW: Staging Hub for dynamic merge demonstration
     AVLTree* activeDeliveries;        
     Treap* availableDrivers;          
 
@@ -28,7 +29,10 @@ public:
     Driver* markDeliveryComplete(int orderID);
     Order* trackActiveOrder(int orderID);
     
+    void mergeHubs(); // NEW: Executes the Binomial Heap Union
+    
     vector<Order*> getPendingOrders();
+    vector<Order*> getStagingOrders(); // NEW: Retrieves Staging state for React
     vector<Order*> getActiveDeliveries();
     vector<Driver*> getAvailableDrivers();
 };

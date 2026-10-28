@@ -4,6 +4,7 @@ import api from './api';
 function App() {
   const [systemState, setSystemState] = useState({
     pendingOrders: [],
+    stagingOrders: [],
     activeDeliveries: [],
     availableDrivers: []
   });
@@ -36,7 +37,16 @@ function App() {
       setNewOrder({ id: '', customer: '', priority: 3 });
       fetchState(); 
     } catch (err) {
-      setError("Failed to add order to Binomial Heap.");
+      setError("Failed to add order to Staging Heap.");
+    }
+  };
+  
+  const handleMergeHubs = async () => {
+    try {
+      await api.post('/merge');
+      fetchState();
+    } catch (err) {
+      setError("Merge operation failed.");
     }
   };
 
@@ -49,9 +59,18 @@ function App() {
     }
   };
 
+  const handleCompleteDelivery = async (orderId) => {
+    try {
+      await api.post('/complete', { id: orderId });
+      fetchState();
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to complete delivery and update AVL Tree.");
+    }
+  };
+
   return (
     <div className="min-h-screen p-4 md:p-8 font-sans">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-[1600px] mx-auto space-y-6">
         
         {/* Header Section */}
         <header className="flex flex-col md:flex-row justify-between items-end border-b border-gray-800 pb-4">
@@ -71,12 +90,20 @@ function App() {
             </div>
           </div>
           
-          <button 
-            onClick={handleDispatch}
-            className="mt-4 md:mt-0 bg-white text-black hover:bg-gray-200 font-bold py-3 px-8 text-sm tracking-widest uppercase transition-all active:scale-95"
-          >
-            Execute Dispatch [↵]
-          </button>
+          <div className="flex gap-4 mt-4 md:mt-0">
+            <button 
+              onClick={handleMergeHubs}
+              className="bg-purple-900 text-purple-100 hover:bg-purple-800 font-bold py-3 px-6 text-sm tracking-widest uppercase transition-all active:scale-95"
+            >
+              Merge Hubs [M]
+            </button>
+            <button 
+              onClick={handleDispatch}
+              className="bg-white text-black hover:bg-gray-200 font-bold py-3 px-8 text-sm tracking-widest uppercase transition-all active:scale-95"
+            >
+              Execute Dispatch [↵]
+            </button>
+          </div>
         </header>
 
         {error && (
@@ -87,7 +114,7 @@ function App() {
 
         {/* Input Panel */}
         <div className="bg-[#111] border border-gray-800 p-5">
-          <div className="text-xs font-mono text-gray-500 mb-3 uppercase tracking-wider">Initialize New Order -{">"}</div>
+          <div className="text-xs font-mono text-gray-500 mb-3 uppercase tracking-wider">Initialize New Order (Routes to Staging) -{">"}</div>
           <form onSubmit={handleAddOrder} className="flex flex-wrap gap-4 items-end">
             <div className="flex-1 min-w-[150px]">
               <label className="block text-xs font-mono text-gray-400 mb-1">ID_HASH</label>
@@ -114,13 +141,38 @@ function App() {
           </form>
         </div>
 
-        {/* 3-Column Data Structure Dashboard */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-[600px]">
+        {/* 4-Column Data Structure Dashboard */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-[600px]">
           
-          {/* Binomial Heap */}
+          {/* Binomial Heap (Staging) */}
           <div className="bg-[#111] border border-gray-800 flex flex-col">
             <div className="p-3 border-b border-gray-800 flex justify-between items-center">
-              <h2 className="text-sm font-bold text-amber-500 tracking-wider uppercase">Binomial Heap</h2>
+              <h2 className="text-sm font-bold text-purple-500 tracking-wider uppercase">Binomial Heap (Staging)</h2>
+              <span className="text-xs font-mono text-gray-500">n = {systemState.stagingOrders.length}</span>
+            </div>
+            <div className="p-4 flex-1 overflow-y-auto space-y-2">
+              {systemState.stagingOrders.length === 0 && <div className="text-xs font-mono text-gray-600">{">"} STAGING_EMPTY</div>}
+              {systemState.stagingOrders.map(order => (
+                <div key={order.id} className="group border border-gray-800 bg-black p-3 hover:border-purple-900 transition-colors">
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="font-mono text-sm text-gray-300">ORD_{order.id}</span>
+                    <span className={`text-[10px] font-mono px-1.5 border ${
+                      order.priority == 1 ? 'border-red-900 text-red-500' : 
+                      order.priority == 2 ? 'border-purple-900 text-purple-500' : 'border-gray-700 text-gray-500'
+                    }`}>
+                      P{order.priority}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 truncate group-hover:text-gray-400">{order.customer}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Binomial Heap (Main) */}
+          <div className="bg-[#111] border border-gray-800 flex flex-col">
+            <div className="p-3 border-b border-gray-800 flex justify-between items-center">
+              <h2 className="text-sm font-bold text-amber-500 tracking-wider uppercase">Binomial Heap (Main)</h2>
               <span className="text-xs font-mono text-gray-500">n = {systemState.pendingOrders.length}</span>
             </div>
             <div className="p-4 flex-1 overflow-y-auto space-y-2">
@@ -151,10 +203,16 @@ function App() {
             <div className="p-4 flex-1 overflow-y-auto space-y-2">
               {systemState.activeDeliveries.length === 0 && <div className="text-xs font-mono text-gray-600">{">"} TREE_EMPTY</div>}
               {systemState.activeDeliveries.map(order => (
-                <div key={order.id} className="border border-gray-800 bg-black p-3 border-l-2 border-l-cyan-800">
+                <div key={order.id} className="group relative border border-gray-800 bg-black p-3 border-l-2 border-l-cyan-800 hover:border-cyan-900 transition-colors">
                   <div className="flex justify-between items-center mb-2">
                     <span className="font-mono text-sm text-gray-300">ORD_{order.id}</span>
-                    <span className="text-[10px] font-mono text-cyan-600 bg-cyan-950 px-1">ACTIVE</span>
+                    <span className="text-[10px] font-mono text-cyan-600 bg-cyan-950 px-1 group-hover:hidden">ACTIVE</span>
+                    <button 
+                      onClick={() => handleCompleteDelivery(order.id)}
+                      className="hidden group-hover:block text-[10px] font-mono bg-cyan-700 hover:bg-cyan-600 text-white px-2 py-0.5 transition-colors"
+                    >
+                      MARK COMPLETE [X]
+                    </button>
                   </div>
                   <div className="text-xs text-gray-500 truncate mb-1">{order.customer}</div>
                   <div className="text-xs font-mono text-gray-600 flex items-center gap-2">

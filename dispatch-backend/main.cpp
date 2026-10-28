@@ -45,7 +45,16 @@ void preloadSystemData(DispatchSystem& dispatchCenter) {
         dispatchCenter.registerDriver(200 + i, drivers[i]);
     }
 
-    for (int i = 0; i < 40; i++) {
+    // Put 30 orders into the Staging Hub and instantly merge them into the Main Hub
+    for (int i = 0; i < 30; i++) {
+        string customer = customers[rand() % customers.size()] + " (Bldg " + to_string((rand() % 99) + 1) + ")";
+        int priority = (rand() % 3) + 1; 
+        dispatchCenter.receiveNewOrder(1000 + i, customer, priority);
+    }
+    dispatchCenter.mergeHubs(); 
+
+    // Put 10 orders into the Staging Hub and leave them there to demonstrate the UI
+    for (int i = 30; i < 40; i++) {
         string customer = customers[rand() % customers.size()] + " (Bldg " + to_string((rand() % 99) + 1) + ")";
         int priority = (rand() % 3) + 1; 
         dispatchCenter.receiveNewOrder(1000 + i, customer, priority);
@@ -70,12 +79,16 @@ int main() {
         setCORS(res);
         json response = {
             {"pendingOrders", json::array()},
+            {"stagingOrders", json::array()}, // NEW: Staging array
             {"activeDeliveries", json::array()},
             {"availableDrivers", json::array()}
         };
 
         for (Order* o : dispatchCenter.getPendingOrders()) {
             response["pendingOrders"].push_back({{"id", o->orderID}, {"customer", o->customerName}, {"priority", o->priority}});
+        }
+        for (Order* o : dispatchCenter.getStagingOrders()) {
+            response["stagingOrders"].push_back({{"id", o->orderID}, {"customer", o->customerName}, {"priority", o->priority}});
         }
         for (Order* o : dispatchCenter.getActiveDeliveries()) {
             response["activeDeliveries"].push_back({{"id", o->orderID}, {"customer", o->customerName}, {"driverID", o->assignedDriverID}});
@@ -87,7 +100,7 @@ int main() {
         res.set_content(response.dump(), "application/json");
     });
 
-    // POST: Create a new order
+    // POST: Create a new order (now lands in Staging Hub)
     svr.Post("/api/orders", [&](const httplib::Request& req, httplib::Response& res) {
         setCORS(res);
         auto body = json::parse(req.body);
@@ -101,6 +114,35 @@ int main() {
         json response = {{"status", "success"}, {"id", newOrder->orderID}};
         res.set_content(response.dump(), "application/json");
     });
+    
+    // POST: Merge Staging Hub into Main Pending Queue
+    svr.Post("/api/merge", [&](const httplib::Request& req, httplib::Response& res) {
+        setCORS(res);
+        dispatchCenter.mergeHubs();
+        json response = {{"status", "success"}};
+        res.set_content(response.dump(), "application/json");
+    });
+
+    // POST: Mark an active delivery as complete
+    svr.Post("/api/complete", [&](const httplib::Request& req, httplib::Response& res) {
+        setCORS(res);
+        try {
+            auto body = json::parse(req.body);
+            int orderId = body["id"].get<int>();
+            Driver* returningDriver = dispatchCenter.markDeliveryComplete(orderId);
+            
+            if (returningDriver == nullptr) {
+                res.status = 404;
+                res.set_content(json({{"error", "Order not found in AVL Tree"}}).dump(), "application/json");
+                return;
+            }
+            json response = {{"status", "success"}, {"driverID", returningDriver->driverID}};
+            res.set_content(response.dump(), "application/json");
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json({{"error", "Failed to parse completion request"}}).dump(), "application/json");
+        }
+    });
 
     // POST: Trigger a dispatch algorithm
     svr.Post("/api/dispatch", [&](const httplib::Request& req, httplib::Response& res) {
@@ -112,7 +154,6 @@ int main() {
             res.set_content(json({{"error", "Queue empty or no drivers available."}}).dump(), "application/json");
             return;
         }
-        
         json response = {{"status", "success"}, {"orderID", dispatched->orderID}, {"driverID", dispatched->assignedDriverID}};
         res.set_content(response.dump(), "application/json");
     });

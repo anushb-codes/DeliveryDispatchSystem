@@ -8,19 +8,21 @@ using namespace std;
 
 DispatchSystem::DispatchSystem() {
     pendingOrdersQueue = new BinomialHeap();
+    stagingOrdersQueue = new BinomialHeap(); // Initialize Staging Hub
     activeDeliveries = new AVLTree();
     availableDrivers = new Treap();
 }
 
 DispatchSystem::~DispatchSystem() {
     delete pendingOrdersQueue;
+    delete stagingOrdersQueue; // Clean up Staging Hub
     delete activeDeliveries;
     delete availableDrivers;
 }
 
 Order* DispatchSystem::receiveNewOrder(int orderID, string customerName, int priority) {
     Order* newOrder = new Order(orderID, customerName, priority);
-    pendingOrdersQueue->insert(newOrder);
+    stagingOrdersQueue->insert(newOrder);
     return newOrder;
 }
 
@@ -29,6 +31,13 @@ Driver* DispatchSystem::registerDriver(int driverID, string driverName) {
     Driver* newDriver = new Driver(driverID, driverName, randomScore);
     availableDrivers->insert(newDriver);
     return newDriver;
+}
+
+void DispatchSystem::mergeHubs() {
+    while (stagingOrdersQueue->isEmpty() == false) {
+        Order* o = stagingOrdersQueue->extractMin();
+        pendingOrdersQueue->insert(o);
+    }
 }
 
 Order* DispatchSystem::dispatchNextDelivery() {
@@ -73,5 +82,6 @@ Order* DispatchSystem::trackActiveOrder(int orderID) {
 }
 
 vector<Order*> DispatchSystem::getPendingOrders() { return pendingOrdersQueue->getPendingOrders(); }
+vector<Order*> DispatchSystem::getStagingOrders() { return stagingOrdersQueue->getPendingOrders(); }
 vector<Order*> DispatchSystem::getActiveDeliveries() { return activeDeliveries->getActiveDeliveries(); }
 vector<Driver*> DispatchSystem::getAvailableDrivers() { return availableDrivers->getAvailableDrivers(); }
